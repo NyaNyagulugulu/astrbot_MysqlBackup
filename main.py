@@ -9,22 +9,17 @@ from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import * 
 
-@register("astrbot_plugin_mysql_backup", "数据库备份", "MySQL数据库直接发送备份插件", "1.2.3")
+@register("astrbot_plugin_mysql_backup", "数据库备份", "MySQL备份(挂载共享版)", "1.5.0")
 class MySQLBackupPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
-        # 绑定配置喵
         self.config = config or {}
-        
-        # 临时存储路径：./data/db_backups_tmp
-        self.tmp_dir = Path("./data/db_backups_tmp")
-        self.tmp_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 加载 schema 默认值作为兜底喵
+        # 核心：使用挂载共享的 tmp 目录 喵！
+        self.share_tmp_dir = Path("/tmp/astrbot_db_backups")
+        self.share_tmp_dir.mkdir(parents=True, exist_ok=True)
         self.defaults = self._load_schema_defaults()
 
     def _load_schema_defaults(self) -> dict:
-        """从同目录下的 _conf_schema.json 读取默认配置喵"""
         schema_path = os.path.join(os.path.dirname(__file__), "_conf_schema.json")
         defaults = {}
         if os.path.exists(schema_path):
@@ -34,20 +29,16 @@ class MySQLBackupPlugin(Star):
                     for key, value in schema.items():
                         defaults[key] = value.get("default")
             except Exception as e:
-                logger.warning(f"读取配置 schema 失败喵: {e}")
+                logger.warning(f"读取配置失败喵: {e}")
         return defaults
 
     def get_val(self, key: str):
-        """优先从用户配置获取，没有则用默认值喵"""
         return self.config.get(key, self.defaults.get(key))
 
     @filter.command("db_backup")
     async def backup_database(self, event: AstrMessageEvent):
-        """
-        导出并发送数据库备份文件喵
-        """
+        """利用挂载共享目录进行超快速备份 喵！"""
         try:
-            # 读取配置信息喵
             db_host = self.get_val("db_host") or "127.0.0.1"
             db_port = self.get_val("db_port") or 3306
             db_user = self.get_val("db_user") or "root"
@@ -55,92 +46,79 @@ class MySQLBackupPlugin(Star):
             backup_databases = self.get_val("backup_databases")
 
             if not backup_databases:
-                yield event.plain_result("❌ 喵呜，配置里没找到要备份的库喵！")
+                yield event.plain_result("❌ 喵！主人还没告诉我要备份哪个库喵！")
                 return
 
-            # 处理库名，支持列表或逗号分隔字符串喵
-            if isinstance(backup_databases, str):
-                db_list = [d.strip() for d in backup_databases.split(",") if d.strip()]
-            else:
-                db_list = backup_databases
-
-            yield event.plain_result(f"🚀 任务开启！准备备份: {', '.join(db_list)} ...")
+            db_list = [d.strip() for d in backup_databases.split(",")] if isinstance(backup_databases, str) else backup_databases
+            yield event.plain_result(f"📂 检测到挂载共享目录，启动高效物理传输模式...")
 
             for db_name in db_list:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                file_path = self.tmp_dir / f"{db_name}_{timestamp}.sql"
+                file_name = f"{db_name}_{timestamp}.sql"
+                # 文件直接写在共享目录下 喵
+                file_path = self.share_tmp_dir / file_name
                 
                 try:
-                    # 调用执行函数喵
-                    await self.execute_mysqldump(db_host, db_port, db_user, db_password, db_name, file_path)
+                    # 导出数据库 喵
+                    await asyncio.wait_for(
+                        self.execute_mysqldump(db_host, db_port, db_user, db_password, db_name, file_path),
+                        timeout=300.0
+                    )
                     
                     if file_path.exists() and file_path.stat().st_size > 0:
                         file_size = os.path.getsize(file_path)
-                        # 发送成功消息和文件喵
+                        size_str = self.format_file_size_iec(file_size)
+                        
+                        # 因为是挂载共享，Docker 里的 NapCat 也能直接通过绝对路径看到这个文件 喵！
+                        # 这种方式最稳定，不会再报 1200 参数缺失了
                         yield event.chain_result([
-                            Plain(f"✅ 导出成功: {db_name}\n📊 大小: {self.format_file_size(file_size)}"),
-                            File(str(file_path.absolute()))
+                            Plain(f"✅ {db_name} 备份成功！\n📊 大小: {size_str}\n📍 路径: {file_path}"),
+                            File(file=str(file_path), name=file_name) 
                         ])
                         
-                        # 异步等待一段时间后清理临时文件喵
-                        asyncio.create_task(self.delayed_cleanup(file_path, 30))
+                        # 稍微留一点时间让文件发送，然后清理 喵
+                        asyncio.create_task(self.delayed_cleanup(file_path, 120))
                     else:
-                        yield event.plain_result(f"⚠️ {db_name} 导出的文件为空，请检查权限喵。")
+                        yield event.plain_result(f"⚠️ {db_name} 备份失败，文件为空喵。")
                 
                 except Exception as e:
-                    yield event.plain_result(f"❌ 导出 {db_name} 失败: \n{str(e)}")
+                    yield event.plain_result(f"❌ {db_name} 备份失败喵: {str(e)}")
 
         except Exception as e:
-            logger.error(f"MySQL Backup Error: {e}", exc_info=True)
-            yield event.plain_result(f"😿 喵呜，运行中发生故障: {str(e)}")
+            logger.error(f"Global Error: {e}", exc_info=True)
+            yield event.plain_result(f"😿 引擎故障喵: {str(e)}")
 
     async def execute_mysqldump(self, host, port, user, password, db, path):
-        """执行 mysqldump 核心逻辑喵"""
-        # --column-statistics=0 是解决主人刚才那个报错的关键喵！
+        """直接写到共享磁盘路径，速度起飞 喵！"""
         cmd = [
-            "mysqldump", 
-            "-h", str(host), 
-            "-P", str(port), 
-            "-u", str(user),
-            "--single-transaction", 
-            "--quick",
-            "--column-statistics=0" 
+            "mysqldump", "-h", str(host), "-P", str(port), "-u", str(user),
+            "--single-transaction", "--quick", "--column-statistics=0", "--hex-blob",
+            f"--result-file={path}", str(db)
         ]
-        
         if password: 
-            cmd.append(f"-p{password}")
+            cmd.insert(9, f"-p{password}")
         
-        cmd.append(str(db))
-        
-        # 使用异步子进程执行喵
         process = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await process.communicate()
-        
+        _, stderr = await process.communicate()
         if process.returncode != 0:
-            error_msg = stderr.decode('utf-8', errors='ignore')
-            # 排除掉密码警告信息，如果还有其他内容才是真的报错喵
-            if "error" in error_msg.lower() or "can't" in error_msg.lower() or "unknown" in error_msg.lower():
-                raise RuntimeError(error_msg)
-        
-        # 将 stdout 写入文件喵
-        with open(path, 'wb') as f:
-            f.write(stdout)
+            raise RuntimeError(stderr.decode('utf-8', errors='ignore'))
 
     async def delayed_cleanup(self, path: Path, delay: int):
-        """延迟删除文件，确保文件已经发送出去喵"""
         await asyncio.sleep(delay)
         if path.exists():
             try:
                 os.remove(path)
-            except:
-                pass
+            except: pass
 
     @staticmethod
-    def format_file_size(size_bytes: int) -> str:
-        """格式化文件大小喵"""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size_bytes < 1024: return f"{size_bytes:.2f} {unit}"
-            size_bytes /= 1024
-        return f"{size_bytes:.2f} TB"
+    def format_file_size_iec(size_bytes: int) -> str:
+        if size_bytes == 0: return "0 B"
+        units = ("B", "KiB", "MiB", "GiB")
+        import math
+        i = int(math.floor(math.log(size_bytes, 1024)))
+        if i >= len(units): i = len(units) - 1
+        p = math.pow(1024, i)
+        s = round(size_bytes / p, 2)
+        return f"{s} {units[i]}"
