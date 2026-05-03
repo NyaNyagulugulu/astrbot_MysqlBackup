@@ -11,6 +11,18 @@
         "default": 3306,
         "hint": "请输入数据库的端口号，通常是 3306 喵"
     },
+    "db_user": {
+        "description": "数据库用户名",
+        "type": "string",
+        "default": "root",
+        "hint": "请输入数据库的用户名喵"
+    },
+    "db_password": {
+        "description": "数据库密码",
+        "type": "string",
+        "default": "wcjs123",
+        "hint": "请输入数据库的密码喵"
+    },
     "backup_databases": {
         "description": "需要备份的数据库名",
         "type": "list",
