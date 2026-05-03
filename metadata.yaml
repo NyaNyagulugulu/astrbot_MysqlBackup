@@ -1,14 +1,14 @@
 name: astrbot_plugin_mysql_backup
-display_name: 数据库备份差距
+display_name: 数据库备份插件
 desc: 将你的数据库导出为sql备份到群聊
 version: v1.0.0
 author: Nyanyagulugulu(不穿胖次の小奶猫)
- repo: https://github.com/NyaNyagulugulu/astrbot_MysqlBackup
- homepage: https://github.com/NyaNyagulugulu/astrbot_MysqlBackup
-support_platforms: 
- - aiocqhttp
- - telegram 
- - discord
+repo: https://github.com/NyaNyagulugulu/astrbot_MysqlBackup
+homepage: https://github.com/NyaNyagulugulu/astrbot_MysqlBackup
+support_platforms:
+  - aiocqhttp
+  - telegram
+  - discord
 astrbot_version: ">=4.10.6,<5"
 tags:
   - 数据库
