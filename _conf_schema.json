@@ -20,8 +20,8 @@
     "db_password": {
         "description": "数据库密码",
         "type": "string",
-        "default": "wcjs123",
-        "hint": "请输入数据库的密码喵"
+        "default": "",
+        "hint": "请输入数据库的密码。如果没有密码可以留空喵。建议使用强密码喵"
     },
     "backup_databases": {
         "description": "需要备份的数据库名",
