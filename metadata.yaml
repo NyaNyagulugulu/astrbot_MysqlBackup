@@ -1,6 +1,6 @@
 name: astrbot_plugin_mysql_backup
-display_name: 数据库备份插件
-desc: 将你的数据库导出为sql备份到群聊
+display_name: MySQL数据库备份
+desc: 将配置的数据库导出为SQL备份文件并发送到聊天
 version: v1.0.0
 author: Nyanyagulugulu(不穿胖次の小奶猫)
 repo: https://github.com/NyaNyagulugulu/astrbot_MysqlBackup
@@ -14,5 +14,4 @@ tags:
   - 数据库
   - 备份
   - sql
-  - 群聊
 license: MIT
